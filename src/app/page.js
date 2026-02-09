@@ -91,13 +91,13 @@ function AppContent() {
             Move tokens across chains in seconds
           </h1>
           <p className="welcome-subtitle">
-            Bridge &amp; swap between 50+ blockchains. Select your chains, pick tokens, enter an amount, and execute — all in one place.
+            Bridge & swap between 50+ blockchains. Select your chains, pick tokens, enter an amount, and execute — all in one place.
           </p>
         </div>
         <div className="welcome-steps">
           <div className="welcome-step">
             <div className="welcome-step-num">1</div>
-            <span>Pick chains &amp; tokens</span>
+            <span>Pick chains & tokens</span>
           </div>
           <div className="welcome-step-arrow">→</div>
           <div className="welcome-step">
@@ -107,7 +107,7 @@ function AppContent() {
           <div className="welcome-step-arrow">→</div>
           <div className="welcome-step">
             <div className="welcome-step-num">3</div>
-            <span>Execute &amp; done</span>
+            <span>Execute & done</span>
           </div>
         </div>
       </div>

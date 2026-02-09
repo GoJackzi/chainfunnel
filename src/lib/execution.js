@@ -54,11 +54,12 @@ export async function executeLeg(leg, walletClient, onStatusUpdate) {
                 to: item.data.to,
                 data: item.data.data,
                 value: BigInt(item.data.value || '0'),
-                chain: { id: txChainId },
+                chainId: txChainId,
             });
 
             onStatusUpdate?.({
                 legId: leg.id,
+                originChainId: leg.originChainId,
                 status: 'executing',
                 message: 'Transaction submitted',
                 txHash: hash,
@@ -158,13 +159,22 @@ export async function executeMultiLeg(legs, walletClient, onStatusUpdate) {
                 message: `Leg ${i + 1} complete`,
             });
         } catch (err) {
-            results.push({ leg, result: { status: 'error', error: err.message } });
+            const isUserRejection =
+                err.message?.includes('User rejected') ||
+                err.message?.includes('user rejected') ||
+                err.code === 4001;
+            const friendlyMsg = isUserRejection
+                ? 'Transaction cancelled by user'
+                : err.message;
+
+            results.push({ leg, result: { status: 'error', error: friendlyMsg } });
             onStatusUpdate?.({
                 legIndex: i,
                 totalLegs: legs.length,
                 legId: leg.id,
+                originChainId: leg.originChainId,
                 status: 'error',
-                message: err.message,
+                message: friendlyMsg,
             });
             break;
         }

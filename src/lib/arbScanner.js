@@ -122,6 +122,28 @@ function generateScanPairs() {
         }
     }
 
+    // USDT across chains
+    const usdtToken = SCAN_TOKENS.find((t) => t.symbol === 'USDT');
+    if (usdtToken) {
+        const usdtChains = Object.keys(usdtToken.addresses).map(Number);
+        for (let i = 0; i < usdtChains.length; i++) {
+            for (let j = i + 1; j < usdtChains.length; j++) {
+                pairs.push({
+                    token: 'USDT',
+                    tokenIcon: '💵',
+                    originChainId: usdtChains[i],
+                    originChainName: getChainName(usdtChains[i]),
+                    originCurrency: usdtToken.addresses[usdtChains[i]],
+                    destinationChainId: usdtChains[j],
+                    destinationChainName: getChainName(usdtChains[j]),
+                    destinationCurrency: usdtToken.addresses[usdtChains[j]],
+                    amount: SCAN_AMOUNT_STABLE,
+                    decimals: 6,
+                });
+            }
+        }
+    }
+
     return pairs;
 }
 

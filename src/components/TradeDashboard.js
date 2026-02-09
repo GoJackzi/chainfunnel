@@ -3,6 +3,24 @@
 import { useState } from 'react';
 import { POPULAR_CHAINS } from '@/lib/relay';
 
+const BLOCK_EXPLORERS = {
+    1: 'https://etherscan.io',
+    8453: 'https://basescan.org',
+    42161: 'https://arbiscan.io',
+    10: 'https://optimistic.etherscan.io',
+    137: 'https://polygonscan.com',
+    324: 'https://explorer.zksync.io',
+    59144: 'https://lineascan.build',
+    534352: 'https://scrollscan.com',
+    56: 'https://bscscan.com',
+    43114: 'https://snowtrace.io',
+};
+
+function getExplorerUrl(chainId, txHash) {
+    const base = BLOCK_EXPLORERS[chainId] || 'https://etherscan.io';
+    return `${base}/tx/${txHash}`;
+}
+
 function getChainName(chainId) {
     const chain = POPULAR_CHAINS.find((c) => c.id === chainId);
     return chain?.name || `Chain ${chainId}`;
@@ -99,7 +117,7 @@ export default function TradeDashboard({ trades }) {
                                         <span>{trade.message}</span>
                                         {trade.txHash && (
                                             <a
-                                                href={`https://basescan.org/tx/${trade.txHash}`}
+                                                href={getExplorerUrl(trade.originChainId, trade.txHash)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 style={{
