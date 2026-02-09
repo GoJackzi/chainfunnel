@@ -29,12 +29,32 @@ export async function executeLeg(leg, walletClient, onStatusUpdate) {
         requestId = step.requestId;
 
         if (step.kind === 'transaction') {
-            // Send the transaction
+            const txChainId = item.data.chainId;
+
+            // Switch wallet to the correct chain BEFORE sending
+            try {
+                await walletClient.switchChain({ id: txChainId });
+            } catch (switchErr) {
+                // If switchChain isn't supported, try the raw RPC method
+                try {
+                    await walletClient.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: `0x${txChainId.toString(16)}` }],
+                    });
+                } catch (rpcErr) {
+                    console.warn('Chain switch failed, proceeding anyway:', rpcErr);
+                }
+            }
+
+            // Small delay to let wallet settle after chain switch
+            await sleep(500);
+
+            // Send the transaction on the correct chain
             const hash = await walletClient.sendTransaction({
                 to: item.data.to,
                 data: item.data.data,
                 value: BigInt(item.data.value || '0'),
-                chainId: item.data.chainId,
+                chain: { id: txChainId },
             });
 
             onStatusUpdate?.({
