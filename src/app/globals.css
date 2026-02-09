@@ -563,6 +563,41 @@ h6 {
   color: var(--text-muted);
 }
 
+.dropdown-item-balance {
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 60px;
+}
+
+.token-bal {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.token-bal.has-funds {
+  color: var(--accent-cyan);
+}
+
+.token-bal.zero {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.balance-loading {
+  color: var(--text-muted);
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.dropdown-item.has-balance {
+  background: rgba(34, 211, 238, 0.04);
+}
+
+.dropdown-item.has-balance:hover {
+  background: rgba(34, 211, 238, 0.08);
+}
+
 /* ============================================
    Trade Leg
    ============================================ */
