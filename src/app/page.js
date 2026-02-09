@@ -55,7 +55,7 @@ function AppContent() {
             </span>
           </div>
           <ConnectButton
-            showBalance={true}
+            showBalance={false}
             chainStatus="icon"
             accountStatus="address"
           />
