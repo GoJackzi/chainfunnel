@@ -9,7 +9,7 @@ export default function ArbScanner({ onSelectOpportunity }) {
     const [lastScan, setLastScan] = useState(null);
     const scanRef = useRef(false);
 
-    const startScan = async () => {
+    const startScan = useCallback(async () => {
         if (scanRef.current) return;
         scanRef.current = true;
         setScanning(true);
@@ -30,11 +30,11 @@ export default function ArbScanner({ onSelectOpportunity }) {
 
         setScanning(false);
         scanRef.current = false;
-    };
+    }, []);
 
     useEffect(() => {
         startScan();
-    }, []);
+    }, [startScan]);
 
     return (
         <div className="glass-card" style={{ background: 'var(--gradient-scanner)' }}>

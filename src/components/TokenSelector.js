@@ -27,20 +27,7 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
     const { address, isConnected } = useAccount();
     const publicClient = usePublicClient({ chainId: chainId || undefined });
 
-    // Load tokens when chain changes
-    useEffect(() => {
-        if (!chainId) {
-            setTokens([]);
-            setBalances({});
-            return;
-        }
-        if (loadedChainRef.current !== chainId) {
-            loadedChainRef.current = chainId;
-            loadTokens(chainId);
-        }
-    }, [chainId]);
-
-    const loadTokens = async (cid) => {
+    const loadTokens = useCallback(async (cid) => {
         setLoading(true);
         setBalances({});
         try {
@@ -61,16 +48,22 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
             ]);
         }
         setLoading(false);
-    };
+    }, []);
 
-    // Fetch balances when dropdown opens
+    // Load tokens when chain changes
     useEffect(() => {
-        if (open && tokens.length > 0 && isConnected && address && chainId && publicClient) {
-            fetchAllBalances();
+        if (!chainId) {
+            setTokens([]);
+            setBalances({});
+            return;
         }
-    }, [open, tokens.length, isConnected, address, chainId]);
+        if (loadedChainRef.current !== chainId) {
+            loadedChainRef.current = chainId;
+            loadTokens(chainId);
+        }
+    }, [chainId, loadTokens]);
 
-    const fetchAllBalances = async () => {
+    const fetchAllBalances = useCallback(async () => {
         if (!publicClient || !address) return;
         setBalancesLoading(true);
 
@@ -157,7 +150,14 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
             console.error('Balance fetch error:', err);
         }
         setBalancesLoading(false);
-    };
+    }, [tokens, publicClient, address]);
+
+    // Fetch balances when dropdown opens
+    useEffect(() => {
+        if (open && tokens.length > 0 && isConnected && address && chainId && publicClient) {
+            fetchAllBalances();
+        }
+    }, [open, tokens.length, isConnected, address, chainId, publicClient, fetchAllBalances]);
 
     const getTokenBalance = (token) => {
         const addr = (token.address || NATIVE_TOKEN).toLowerCase();
@@ -243,6 +243,7 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                         <img
                             src={selected.metadata.logoURI}
                             alt={selected.symbol}
+                            // eslint-disable-next-line @next/next/no-img-element
                             onError={(e) => {
                                 e.target.style.display = 'none';
                             }}
@@ -308,6 +309,7 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                                                     <img
                                                         src={token.metadata.logoURI}
                                                         alt={token.symbol}
+                                                        // eslint-disable-next-line @next/next/no-img-element
                                                         onError={(e) => {
                                                             e.target.style.display = 'none';
                                                         }}

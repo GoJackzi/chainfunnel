@@ -10,14 +10,7 @@ export default function ChainSelector({ value, onChange, label }) {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // Load ALL chains from Relay API on first open
-    useEffect(() => {
-        if (open && allChains.length === 0) {
-            loadAllChains();
-        }
-    }, [open]);
-
-    const loadAllChains = async () => {
+    const loadAllChains = useCallback(async () => {
         setLoading(true);
         try {
             const data = await getChains();
@@ -35,7 +28,14 @@ export default function ChainSelector({ value, onChange, label }) {
             setAllChains(POPULAR_CHAINS);
         }
         setLoading(false);
-    };
+    }, []);
+
+    // Load ALL chains from Relay API on first open
+    useEffect(() => {
+        if (open && allChains.length === 0) {
+            loadAllChains();
+        }
+    }, [open, allChains.length, loadAllChains]);
 
     const filteredChains = search
         ? (allChains.length > 0 ? allChains : chains).filter(
@@ -65,6 +65,7 @@ export default function ChainSelector({ value, onChange, label }) {
                             src={selected.iconUrl}
                             alt={selected.name}
                             style={{ width: 18, height: 18, borderRadius: '50%' }}
+                            // eslint-disable-next-line @next/next/no-img-element
                             onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling && (e.target.nextSibling.style.display = 'inline');
@@ -118,6 +119,7 @@ export default function ChainSelector({ value, onChange, label }) {
                                                     src={chain.iconUrl}
                                                     alt={chain.name}
                                                     style={{ width: 20, height: 20, borderRadius: '50%' }}
+                                                    // eslint-disable-next-line @next/next/no-img-element
                                                     onError={(e) => { e.target.textContent = chain.icon || '🔗'; }}
                                                 />
                                             ) : (

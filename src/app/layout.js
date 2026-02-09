@@ -10,6 +10,11 @@ export const metadata = {
       'Multi-leg batch trade execution across 50+ chains with built-in arbitrage detection.',
     type: 'website',
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ChainFunnel — Cross-Chain Trade Aggregation Terminal',
+    description: 'Multi-leg batch trade execution across 50+ chains with built-in arbitrage detection.',
+  },
 };
 
 export default function RootLayout({ children }) {
