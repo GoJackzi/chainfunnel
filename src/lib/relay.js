@@ -15,7 +15,7 @@ export function getAppFees() {
     return [
         {
             recipient: APP_FEE_RECIPIENT,
-            fee: APP_FEE_BPS,
+            fee: Number(APP_FEE_BPS),
         },
     ];
 }
