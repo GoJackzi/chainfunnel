@@ -1245,3 +1245,235 @@ input[type="number"] {
   z-index: 50;
   margin-bottom: 6px;
 }
+
+/* ============================================
+   Welcome Hero
+   ============================================ */
+
+.welcome-hero {
+  background: var(--gradient-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 28px 32px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  backdrop-filter: blur(20px);
+}
+
+.welcome-content {
+  flex: 1;
+}
+
+.welcome-title {
+  font-size: 22px;
+  font-weight: 800;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.welcome-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 500px;
+}
+
+.welcome-steps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.welcome-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.welcome-step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.welcome-step-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@media (max-width: 1100px) {
+  .welcome-hero {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .welcome-subtitle {
+    max-width: none;
+  }
+}
+
+/* ============================================
+   Step Indicator (per leg)
+   ============================================ */
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+
+.step-dot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.step-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--bg-glass);
+  border: 2px solid var(--border-primary);
+  color: var(--text-muted);
+  transition: all var(--transition-normal);
+  flex-shrink: 0;
+}
+
+.step-dot.done .step-circle {
+  background: var(--accent-green-dim);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.step-dot.active .step-circle {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+.step-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.step-dot.done .step-label {
+  color: var(--accent-green);
+}
+
+.step-dot.active .step-label {
+  color: var(--accent-primary);
+}
+
+.step-line {
+  width: 24px;
+  height: 2px;
+  background: var(--border-primary);
+  margin: 0 2px;
+  border-radius: 1px;
+  transition: background var(--transition-normal);
+}
+
+.step-line.done {
+  background: var(--accent-green);
+}
+
+/* ============================================
+   Trade Action Button States
+   ============================================ */
+
+.trade-action-btn {
+  transition: all var(--transition-normal);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.trade-action-btn.disabled {
+  background: var(--bg-glass);
+  color: var(--text-muted);
+  border: 1px solid var(--border-primary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.trade-action-btn.quote {
+  background: linear-gradient(135deg, #22d3ee, #6366f1);
+  color: white;
+  box-shadow: 0 4px 20px rgba(34, 211, 238, 0.3);
+  cursor: pointer;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+.trade-action-btn.quote:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 28px rgba(34, 211, 238, 0.4);
+}
+
+.trade-action-btn.execute {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-button);
+  cursor: pointer;
+}
+
+.trade-action-btn.execute:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.4);
+}
+
+.trade-action-btn.loading,
+.trade-action-btn.executing {
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  cursor: wait;
+}
+
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 4px 20px rgba(34, 211, 238, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 4px 30px rgba(34, 211, 238, 0.5);
+  }
+}
+
+.leg-quote-success {
+  background: var(--accent-green-dim);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px !important;
+  border: 1px solid rgba(16, 185, 129, 0.15) !important;
+  border-top: 1px solid rgba(16, 185, 129, 0.15) !important;
+}

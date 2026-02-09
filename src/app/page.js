@@ -84,6 +84,34 @@ function AppContent() {
         </div>
       </div>
 
+      {/* Welcome Hero */}
+      <div className="welcome-hero">
+        <div className="welcome-content">
+          <h1 className="welcome-title">
+            Move tokens across chains in seconds
+          </h1>
+          <p className="welcome-subtitle">
+            Bridge &amp; swap between 50+ blockchains. Select your chains, pick tokens, enter an amount, and execute — all in one place.
+          </p>
+        </div>
+        <div className="welcome-steps">
+          <div className="welcome-step">
+            <div className="welcome-step-num">1</div>
+            <span>Pick chains &amp; tokens</span>
+          </div>
+          <div className="welcome-step-arrow">→</div>
+          <div className="welcome-step">
+            <div className="welcome-step-num">2</div>
+            <span>Get a quote</span>
+          </div>
+          <div className="welcome-step-arrow">→</div>
+          <div className="welcome-step">
+            <div className="welcome-step-num">3</div>
+            <span>Execute &amp; done</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main 3-Panel Grid */}
       <div className="main-grid">
         {/* Left: Arb Scanner */}

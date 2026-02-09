@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
 import { formatUnits } from 'viem';
 import ChainSelector from './ChainSelector';
@@ -26,7 +26,7 @@ function createEmptyLeg() {
     };
 }
 
-// Balance hook using publicClient (same source as dropdown)
+// Balance hook using publicClient
 function useLegBalance(chainId, tokenAddress) {
     const { address, isConnected } = useAccount();
     const publicClient = usePublicClient({ chainId: chainId || undefined });
@@ -57,36 +57,24 @@ function useLegBalance(chainId, tokenAddress) {
                 } else {
                     raw = await publicClient.readContract({
                         address: tokenAddress,
-                        abi: [
-                            {
-                                name: 'balanceOf',
-                                type: 'function',
-                                stateMutability: 'view',
-                                inputs: [{ name: 'account', type: 'address' }],
-                                outputs: [{ name: 'balance', type: 'uint256' }],
-                            },
-                        ],
+                        abi: [{
+                            name: 'balanceOf', type: 'function', stateMutability: 'view',
+                            inputs: [{ name: 'account', type: 'address' }],
+                            outputs: [{ name: 'balance', type: 'uint256' }],
+                        }],
                         functionName: 'balanceOf',
                         args: [address],
                     });
-                    // Try to get decimals
                     try {
                         decimals = await publicClient.readContract({
                             address: tokenAddress,
-                            abi: [
-                                {
-                                    name: 'decimals',
-                                    type: 'function',
-                                    stateMutability: 'view',
-                                    inputs: [],
-                                    outputs: [{ name: '', type: 'uint8' }],
-                                },
-                            ],
+                            abi: [{
+                                name: 'decimals', type: 'function', stateMutability: 'view',
+                                inputs: [], outputs: [{ name: '', type: 'uint8' }],
+                            }],
                             functionName: 'decimals',
                         });
-                    } catch {
-                        decimals = 18;
-                    }
+                    } catch { decimals = 18; }
                 }
 
                 if (!cancelled) {
@@ -94,7 +82,6 @@ function useLegBalance(chainId, tokenAddress) {
                     setBalance(formatted);
                 }
             } catch (err) {
-                console.error('Balance fetch error:', err);
                 if (!cancelled) setBalance(null);
             }
             if (!cancelled) setLoading(false);
@@ -127,11 +114,7 @@ function LegBalanceDisplay({ chainId, tokenAddress, tokenSymbol, onMax }) {
                         {num < 0.0001 && num > 0 ? '<0.0001' : num.toFixed(4)} {symbol}
                     </span>
                     {num > 0 && (
-                        <button
-                            className="balance-max-btn"
-                            onClick={() => onMax(balance)}
-                            type="button"
-                        >
+                        <button className="balance-max-btn" onClick={() => onMax(balance)} type="button">
                             MAX
                         </button>
                     )}
@@ -141,9 +124,37 @@ function LegBalanceDisplay({ chainId, tokenAddress, tokenSymbol, onMax }) {
     );
 }
 
+// Step indicator
+function StepIndicator({ leg }) {
+    const steps = [
+        { label: 'From', done: !!leg.originChainId },
+        { label: 'Token', done: !!leg.originCurrency },
+        { label: 'Amount', done: !!leg.amount && parseFloat(leg.amount) > 0 },
+        { label: 'To', done: !!leg.destinationChainId && !!leg.destinationCurrency },
+    ];
+
+    const completedCount = steps.filter((s) => s.done).length;
+    const allDone = completedCount === steps.length;
+
+    return (
+        <div className="step-indicator">
+            {steps.map((step, i) => (
+                <div key={i} className={`step-dot ${step.done ? 'done' : ''} ${!step.done && i === completedCount ? 'active' : ''}`}>
+                    <div className="step-circle">
+                        {step.done ? '✓' : i + 1}
+                    </div>
+                    <span className="step-label">{step.label}</span>
+                    {i < steps.length - 1 && <div className={`step-line ${step.done ? 'done' : ''}`} />}
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export default function TradeBuilder({ onTradeUpdate }) {
     const [legs, setLegs] = useState([createEmptyLeg()]);
     const [executing, setExecuting] = useState(false);
+    const [quotingAll, setQuotingAll] = useState(false);
     const { address, isConnected } = useAccount();
     const { data: walletClient } = useWalletClient();
 
@@ -161,16 +172,16 @@ export default function TradeBuilder({ onTradeUpdate }) {
         setLegs((prev) => prev.filter((leg) => leg.id !== legId));
     };
 
-    const fetchQuote = async (leg) => {
-        if (
-            !leg.originChainId ||
-            !leg.originCurrency ||
-            !leg.destinationChainId ||
-            !leg.destinationCurrency ||
-            !leg.amount ||
-            parseFloat(leg.amount) <= 0
-        )
-            return;
+    const isLegReady = (leg) =>
+        leg.originChainId &&
+        leg.originCurrency &&
+        leg.destinationChainId &&
+        leg.destinationCurrency &&
+        leg.amount &&
+        parseFloat(leg.amount) > 0;
+
+    const fetchQuoteForLeg = async (leg) => {
+        if (!isLegReady(leg)) return null;
 
         updateLeg(leg.id, { quoteLoading: true, quoteError: null });
 
@@ -190,27 +201,31 @@ export default function TradeBuilder({ onTradeUpdate }) {
             });
 
             updateLeg(leg.id, { quote, quoteLoading: false });
+            return quote;
         } catch (err) {
             updateLeg(leg.id, {
                 quote: null,
                 quoteLoading: false,
                 quoteError: err.message,
             });
+            return null;
         }
+    };
+
+    // Fetch quotes for ALL legs at once
+    const fetchAllQuotes = async () => {
+        setQuotingAll(true);
+        const readyLegs = legs.filter(isLegReady);
+
+        await Promise.all(readyLegs.map((leg) => fetchQuoteForLeg(leg)));
+        setQuotingAll(false);
     };
 
     const handleExecute = async () => {
         if (!walletClient || !isConnected) return;
 
         setExecuting(true);
-        const validLegs = legs.filter(
-            (l) =>
-                l.originChainId &&
-                l.originCurrency &&
-                l.destinationChainId &&
-                l.destinationCurrency &&
-                l.amount
-        );
+        const validLegs = legs.filter((l) => isLegReady(l) && l.quote);
 
         const executionLegs = validLegs.map((l) => {
             const decimals = l.originToken?.decimals || 18;
@@ -220,9 +235,7 @@ export default function TradeBuilder({ onTradeUpdate }) {
                 originCurrency: l.originCurrency,
                 destinationChainId: l.destinationChainId,
                 destinationCurrency: l.destinationCurrency,
-                amount: BigInt(
-                    Math.floor(parseFloat(l.amount) * 10 ** decimals)
-                ).toString(),
+                amount: BigInt(Math.floor(parseFloat(l.amount) * 10 ** decimals)).toString(),
             };
         });
 
@@ -237,17 +250,45 @@ export default function TradeBuilder({ onTradeUpdate }) {
     };
 
     const totalFeesUsd = legs.reduce((sum, leg) => {
-        const feeUsd = parseFloat(leg.quote?.fees?.relayer?.amountUsd || '0');
-        return sum + feeUsd;
+        return sum + parseFloat(leg.quote?.fees?.relayer?.amountUsd || '0');
     }, 0);
 
     const totalOutputUsd = legs.reduce((sum, leg) => {
-        const outUsd = parseFloat(leg.quote?.details?.currencyOut?.amountUsd || '0');
-        return sum + outUsd;
+        return sum + parseFloat(leg.quote?.details?.currencyOut?.amountUsd || '0');
     }, 0);
 
     const allQuoted = legs.every((l) => l.quote) && legs.length > 0;
+    const anyReady = legs.some(isLegReady);
+    const anyQuoting = legs.some((l) => l.quoteLoading) || quotingAll;
     const canExecute = isConnected && allQuoted && !executing;
+
+    // Determine button state
+    const getButtonContent = () => {
+        if (executing) {
+            return { text: 'Executing...', icon: '⏳', disabled: true, onClick: null, style: 'executing' };
+        }
+        if (!isConnected) {
+            return { text: 'Connect Wallet First', icon: '🔌', disabled: true, onClick: null, style: 'disabled' };
+        }
+        if (anyQuoting) {
+            return { text: 'Fetching Quotes...', icon: '⏳', disabled: true, onClick: null, style: 'loading' };
+        }
+        if (!anyReady) {
+            return { text: 'Fill in trade details above', icon: '👆', disabled: true, onClick: null, style: 'disabled' };
+        }
+        if (!allQuoted) {
+            return { text: '🔍 Get Quotes', icon: null, disabled: false, onClick: fetchAllQuotes, style: 'quote' };
+        }
+        return {
+            text: `⚡ Execute ${legs.length} ${legs.length === 1 ? 'Trade' : 'Trades'}`,
+            icon: null,
+            disabled: false,
+            onClick: handleExecute,
+            style: 'execute',
+        };
+    };
+
+    const btn = getButtonContent();
 
     return (
         <div className="glass-card">
@@ -267,20 +308,19 @@ export default function TradeBuilder({ onTradeUpdate }) {
                         <div className="leg-header">
                             <span className="leg-number">LEG {index + 1}</span>
                             {legs.length > 1 && (
-                                <button
-                                    className="leg-remove"
-                                    onClick={() => removeLeg(leg.id)}
-                                    title="Remove leg"
-                                >
+                                <button className="leg-remove" onClick={() => removeLeg(leg.id)} title="Remove leg">
                                     ✕
                                 </button>
                             )}
                         </div>
 
+                        {/* Step Indicator */}
+                        <StepIndicator leg={leg} />
+
                         <div className="leg-flow">
                             <div className="leg-side">
                                 <ChainSelector
-                                    label="From Chain"
+                                    label="① From Chain"
                                     value={leg.originChainId}
                                     onChange={(chainId) =>
                                         updateLeg(leg.id, {
@@ -292,7 +332,7 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                     }
                                 />
                                 <TokenSelector
-                                    label="Token"
+                                    label="② Token to Send"
                                     chainId={leg.originChainId}
                                     value={leg.originCurrency}
                                     onChange={(addr, token) =>
@@ -305,7 +345,7 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                 />
                                 <div className="input-group">
                                     <div className="input-label-row">
-                                        <span className="input-label">Amount</span>
+                                        <span className="input-label">③ Amount</span>
                                     </div>
                                     <input
                                         className="input-field"
@@ -315,16 +355,13 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                         onChange={(e) =>
                                             updateLeg(leg.id, { amount: e.target.value, quote: null })
                                         }
-                                        onBlur={() => fetchQuote(leg)}
                                     />
                                     <LegBalanceDisplay
                                         chainId={leg.originChainId}
                                         tokenAddress={leg.originCurrency}
                                         tokenSymbol={leg.originToken?.symbol}
                                         onMax={(maxVal) => {
-                                            const isNative =
-                                                !leg.originCurrency ||
-                                                leg.originCurrency === NATIVE_TOKEN;
+                                            const isNative = !leg.originCurrency || leg.originCurrency === NATIVE_TOKEN;
                                             const val = isNative
                                                 ? Math.max(0, parseFloat(maxVal) - 0.001).toString()
                                                 : maxVal;
@@ -338,7 +375,7 @@ export default function TradeBuilder({ onTradeUpdate }) {
 
                             <div className="leg-side">
                                 <ChainSelector
-                                    label="To Chain"
+                                    label="④ To Chain"
                                     value={leg.destinationChainId}
                                     onChange={(chainId) =>
                                         updateLeg(leg.id, {
@@ -350,7 +387,7 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                     }
                                 />
                                 <TokenSelector
-                                    label="Token"
+                                    label="Token to Receive"
                                     chainId={leg.destinationChainId}
                                     value={leg.destinationCurrency}
                                     onChange={(addr, token) =>
@@ -374,14 +411,14 @@ export default function TradeBuilder({ onTradeUpdate }) {
                         {leg.quoteError && (
                             <div className="leg-quote">
                                 <span className="leg-quote-label" style={{ color: 'var(--accent-red)' }}>
-                                    {leg.quoteError}
+                                    ❌ {leg.quoteError}
                                 </span>
                             </div>
                         )}
                         {leg.quote && (
-                            <div className="leg-quote">
+                            <div className="leg-quote leg-quote-success">
                                 <span className="leg-quote-label">
-                                    You receive ~{formatUsd(leg.quote.details?.currencyOut?.amountUsd)}
+                                    ✅ You receive ~{formatUsd(leg.quote.details?.currencyOut?.amountUsd)}
                                 </span>
                                 <span className="leg-quote-value neutral">
                                     Fee: {formatUsd(leg.quote.fees?.relayer?.amountUsd)}
@@ -412,23 +449,14 @@ export default function TradeBuilder({ onTradeUpdate }) {
                     </div>
                 )}
 
+                {/* Main Action Button */}
                 <button
-                    className="btn btn-primary btn-lg btn-full"
-                    onClick={handleExecute}
-                    disabled={!canExecute}
+                    className={`btn btn-lg btn-full trade-action-btn ${btn.style}`}
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
                 >
-                    {executing ? (
-                        <>
-                            <span className="spinner"></span>
-                            Executing...
-                        </>
-                    ) : !isConnected ? (
-                        'Connect Wallet to Execute'
-                    ) : !allQuoted ? (
-                        'Get Quotes First'
-                    ) : (
-                        `⚡ Execute ${legs.length} ${legs.length === 1 ? 'Trade' : 'Trades'}`
-                    )}
+                    {anyQuoting && <span className="spinner"></span>}
+                    {btn.text}
                 </button>
 
                 <div className="fee-info">
