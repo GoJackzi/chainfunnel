@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useState, useCallback, useEffect } from 'react';
+import { useAccount, useWalletClient, useBalance } from 'wagmi';
 import ChainSelector from './ChainSelector';
 import TokenSelector from './TokenSelector';
 import { getQuote, formatUsd, NATIVE_TOKEN, APP_FEE_BPS } from '@/lib/relay';
@@ -23,6 +23,59 @@ function createEmptyLeg() {
         quoteLoading: false,
         quoteError: null,
     };
+}
+
+// Sub-component for balance display per leg
+function LegBalance({ chainId, tokenAddress, tokenDecimals, tokenSymbol, onMax }) {
+    const { address, isConnected } = useAccount();
+
+    const isNative =
+        !tokenAddress ||
+        tokenAddress === NATIVE_TOKEN ||
+        tokenAddress === '0x0000000000000000000000000000000000000000';
+
+    const { data: balanceData, isLoading } = useBalance({
+        address: isConnected ? address : undefined,
+        chainId: chainId || undefined,
+        token: isNative ? undefined : tokenAddress,
+        query: {
+            enabled: !!chainId && isConnected,
+        },
+    });
+
+    if (!isConnected || !chainId) return null;
+
+    const formatted = balanceData?.formatted
+        ? parseFloat(balanceData.formatted)
+        : 0;
+    const symbol = balanceData?.symbol || tokenSymbol || 'ETH';
+
+    return (
+        <div className="balance-display">
+            <span className="balance-label">Balance:</span>
+            {isLoading ? (
+                <span className="balance-value">...</span>
+            ) : (
+                <>
+                    <span className="balance-value">
+                        {formatted < 0.0001 && formatted > 0
+                            ? '<0.0001'
+                            : formatted.toFixed(4)}{' '}
+                        {symbol}
+                    </span>
+                    {formatted > 0 && (
+                        <button
+                            className="balance-max-btn"
+                            onClick={() => onMax(balanceData?.formatted || '0')}
+                            type="button"
+                        >
+                            MAX
+                        </button>
+                    )}
+                </>
+            )}
+        </div>
+    );
 }
 
 export default function TradeBuilder({ onTradeUpdate }) {
@@ -51,7 +104,8 @@ export default function TradeBuilder({ onTradeUpdate }) {
             !leg.originCurrency ||
             !leg.destinationChainId ||
             !leg.destinationCurrency ||
-            !leg.amount
+            !leg.amount ||
+            parseFloat(leg.amount) <= 0
         )
             return;
 
@@ -191,7 +245,9 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                     }
                                 />
                                 <div className="input-group">
-                                    <span className="input-label">Amount</span>
+                                    <div className="input-label-row">
+                                        <span className="input-label">Amount</span>
+                                    </div>
                                     <input
                                         className="input-field"
                                         type="number"
@@ -201,6 +257,23 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                             updateLeg(leg.id, { amount: e.target.value, quote: null })
                                         }
                                         onBlur={() => fetchQuote(leg)}
+                                    />
+                                    {/* Balance + MAX button */}
+                                    <LegBalance
+                                        chainId={leg.originChainId}
+                                        tokenAddress={leg.originCurrency}
+                                        tokenDecimals={leg.originToken?.decimals}
+                                        tokenSymbol={leg.originToken?.symbol}
+                                        onMax={(maxVal) => {
+                                            // Leave a tiny bit for gas if native token
+                                            const isNative =
+                                                !leg.originCurrency ||
+                                                leg.originCurrency === NATIVE_TOKEN;
+                                            const val = isNative
+                                                ? Math.max(0, parseFloat(maxVal) - 0.001).toString()
+                                                : maxVal;
+                                            updateLeg(leg.id, { amount: val, quote: null });
+                                        }}
                                     />
                                 </div>
                             </div>
