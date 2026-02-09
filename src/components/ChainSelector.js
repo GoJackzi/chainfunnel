@@ -5,7 +5,7 @@ import { getChains, POPULAR_CHAINS } from '@/lib/relay';
 
 export default function ChainSelector({ value, onChange, label }) {
     const [open, setOpen] = useState(false);
-    const [chains, setChains] = useState(POPULAR_CHAINS);
+    const [chains, setChains] = useState(() => [...POPULAR_CHAINS].sort((a, b) => a.name.localeCompare(b.name)));
     const [allChains, setAllChains] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
@@ -20,12 +20,17 @@ export default function ChainSelector({ value, onChange, label }) {
                 icon: getChainEmoji(c.id || c.chainId, c.name),
                 iconUrl: c.icon?.url || c.iconUrl || null,
             }));
+
+            // Sort chains alphabetically by name (A-Z)
+            chainList.sort((a, b) => a.name.localeCompare(b.name));
+
             setAllChains(chainList);
             setChains(chainList);
         } catch (err) {
             console.error('Failed to load chains:', err);
-            // Keep using popular chains as fallback
-            setAllChains(POPULAR_CHAINS);
+            // Keep using popular chains as fallback, but sorted
+            const fallback = [...POPULAR_CHAINS].sort((a, b) => a.name.localeCompare(b.name));
+            setAllChains(fallback);
         }
         setLoading(false);
     }, []);
