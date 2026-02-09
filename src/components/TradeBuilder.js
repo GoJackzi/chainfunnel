@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useAccount, useWalletClient, useBalance } from 'wagmi';
+import { useAccount, useWalletClient, usePublicClient } from 'wagmi';
+import { formatUnits } from 'viem';
 import ChainSelector from './ChainSelector';
 import TokenSelector from './TokenSelector';
 import { getQuote, formatUsd, NATIVE_TOKEN, APP_FEE_BPS } from '@/lib/relay';
@@ -25,48 +26,110 @@ function createEmptyLeg() {
     };
 }
 
-// Sub-component for balance display per leg
-function LegBalance({ chainId, tokenAddress, tokenDecimals, tokenSymbol, onMax }) {
+// Balance hook using publicClient (same source as dropdown)
+function useLegBalance(chainId, tokenAddress) {
     const { address, isConnected } = useAccount();
+    const publicClient = usePublicClient({ chainId: chainId || undefined });
+    const [balance, setBalance] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-    const isNative =
-        !tokenAddress ||
-        tokenAddress === NATIVE_TOKEN ||
-        tokenAddress === '0x0000000000000000000000000000000000000000';
+    useEffect(() => {
+        if (!isConnected || !address || !chainId || !tokenAddress || !publicClient) {
+            setBalance(null);
+            return;
+        }
 
-    const { data: balanceData, isLoading } = useBalance({
-        address: isConnected ? address : undefined,
-        chainId: chainId || undefined,
-        token: isNative ? undefined : tokenAddress,
-        query: {
-            enabled: !!chainId && isConnected,
-        },
-    });
+        let cancelled = false;
+        setLoading(true);
 
-    if (!isConnected || !chainId) return null;
+        const fetchBalance = async () => {
+            try {
+                const isNative =
+                    !tokenAddress ||
+                    tokenAddress === NATIVE_TOKEN ||
+                    tokenAddress === '0x0000000000000000000000000000000000000000';
 
-    const formatted = balanceData?.formatted
-        ? parseFloat(balanceData.formatted)
-        : 0;
-    const symbol = balanceData?.symbol || tokenSymbol || 'ETH';
+                let raw;
+                let decimals = 18;
+
+                if (isNative) {
+                    raw = await publicClient.getBalance({ address });
+                } else {
+                    raw = await publicClient.readContract({
+                        address: tokenAddress,
+                        abi: [
+                            {
+                                name: 'balanceOf',
+                                type: 'function',
+                                stateMutability: 'view',
+                                inputs: [{ name: 'account', type: 'address' }],
+                                outputs: [{ name: 'balance', type: 'uint256' }],
+                            },
+                        ],
+                        functionName: 'balanceOf',
+                        args: [address],
+                    });
+                    // Try to get decimals
+                    try {
+                        decimals = await publicClient.readContract({
+                            address: tokenAddress,
+                            abi: [
+                                {
+                                    name: 'decimals',
+                                    type: 'function',
+                                    stateMutability: 'view',
+                                    inputs: [],
+                                    outputs: [{ name: '', type: 'uint8' }],
+                                },
+                            ],
+                            functionName: 'decimals',
+                        });
+                    } catch {
+                        decimals = 18;
+                    }
+                }
+
+                if (!cancelled) {
+                    const formatted = formatUnits(raw, Number(decimals));
+                    setBalance(formatted);
+                }
+            } catch (err) {
+                console.error('Balance fetch error:', err);
+                if (!cancelled) setBalance(null);
+            }
+            if (!cancelled) setLoading(false);
+        };
+
+        fetchBalance();
+        return () => { cancelled = true; };
+    }, [chainId, tokenAddress, address, isConnected]);
+
+    return { balance, loading };
+}
+
+function LegBalanceDisplay({ chainId, tokenAddress, tokenSymbol, onMax }) {
+    const { balance, loading } = useLegBalance(chainId, tokenAddress);
+    const { isConnected } = useAccount();
+
+    if (!isConnected || !chainId || !tokenAddress) return null;
+
+    const num = balance ? parseFloat(balance) : 0;
+    const symbol = tokenSymbol || 'ETH';
 
     return (
         <div className="balance-display">
             <span className="balance-label">Balance:</span>
-            {isLoading ? (
+            {loading ? (
                 <span className="balance-value">...</span>
             ) : (
                 <>
                     <span className="balance-value">
-                        {formatted < 0.0001 && formatted > 0
-                            ? '<0.0001'
-                            : formatted.toFixed(4)}{' '}
-                        {symbol}
+                        {num < 0.0001 && num > 0 ? '<0.0001' : num.toFixed(4)} {symbol}
                     </span>
-                    {formatted > 0 && (
+                    {num > 0 && (
                         <button
                             className="balance-max-btn"
-                            onClick={() => onMax(balanceData?.formatted || '0')}
+                            onClick={() => onMax(balance)}
                             type="button"
                         >
                             MAX
@@ -164,13 +227,9 @@ export default function TradeBuilder({ onTradeUpdate }) {
         });
 
         try {
-            const results = await executeMultiLeg(
-                executionLegs,
-                walletClient,
-                (update) => {
-                    onTradeUpdate?.(update);
-                }
-            );
+            await executeMultiLeg(executionLegs, walletClient, (update) => {
+                onTradeUpdate?.(update);
+            });
         } catch (err) {
             console.error('Execution error:', err);
         }
@@ -258,14 +317,11 @@ export default function TradeBuilder({ onTradeUpdate }) {
                                         }
                                         onBlur={() => fetchQuote(leg)}
                                     />
-                                    {/* Balance + MAX button */}
-                                    <LegBalance
+                                    <LegBalanceDisplay
                                         chainId={leg.originChainId}
                                         tokenAddress={leg.originCurrency}
-                                        tokenDecimals={leg.originToken?.decimals}
                                         tokenSymbol={leg.originToken?.symbol}
                                         onMax={(maxVal) => {
-                                            // Leave a tiny bit for gas if native token
                                             const isNative =
                                                 !leg.originCurrency ||
                                                 leg.originCurrency === NATIVE_TOKEN;

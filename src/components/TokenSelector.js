@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, usePublicClient } from 'wagmi';
 import { formatUnits } from 'viem';
 import { getCurrencies, NATIVE_TOKEN } from '@/lib/relay';
@@ -22,77 +22,53 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
     const [loading, setLoading] = useState(false);
     const [balances, setBalances] = useState({});
     const [balancesLoading, setBalancesLoading] = useState(false);
+    const loadedChainRef = useRef(null);
 
     const { address, isConnected } = useAccount();
     const publicClient = usePublicClient({ chainId: chainId || undefined });
 
     // Load tokens when chain changes
     useEffect(() => {
-        if (!chainId) return;
-        loadTokens();
+        if (!chainId) {
+            setTokens([]);
+            setBalances({});
+            return;
+        }
+        if (loadedChainRef.current !== chainId) {
+            loadedChainRef.current = chainId;
+            loadTokens(chainId);
+        }
     }, [chainId]);
 
-    // Fetch balances when dropdown opens and we have tokens
-    useEffect(() => {
-        if (open && tokens.length > 0 && isConnected && address && chainId) {
-            fetchAllBalances();
-        }
-    }, [open, tokens.length, isConnected, address, chainId]);
-
-    const loadTokens = async () => {
+    const loadTokens = async (cid) => {
         setLoading(true);
+        setBalances({});
         try {
-            const data = await getCurrencies(chainId, { limit: 100, verified: true });
-            let tokenList = [];
-
-            if (Array.isArray(data)) {
-                tokenList = data;
-            } else if (data?.currencies) {
-                tokenList = data.currencies;
-            } else if (data) {
-                // Try to extract tokens from various response formats
-                const keys = Object.keys(data);
-                for (const key of keys) {
-                    if (Array.isArray(data[key])) {
-                        tokenList = data[key];
-                        break;
-                    }
-                }
-            }
-
-            // Deduplicate by address
-            const seen = new Set();
-            tokenList = tokenList.filter((t) => {
-                const addr = (t.address || NATIVE_TOKEN).toLowerCase();
-                if (seen.has(addr)) return false;
-                seen.add(addr);
-                return true;
-            });
-
+            const tokenList = await getCurrencies(cid, { limit: 100, verified: true });
+            console.log(`[TokenSelector] Loaded ${tokenList.length} tokens for chain ${cid}`);
             setTokens(tokenList);
         } catch (err) {
             console.error('Failed to load tokens:', err);
+            // Fallback with common tokens
             setTokens([
-                { address: NATIVE_TOKEN, symbol: 'ETH', name: 'Ethereum', decimals: 18 },
+                {
+                    address: NATIVE_TOKEN,
+                    symbol: 'ETH',
+                    name: 'Ethereum',
+                    decimals: 18,
+                    metadata: { isNative: true },
+                },
             ]);
         }
         setLoading(false);
     };
 
-    const searchTokens = async (term) => {
-        if (!chainId || !term) return;
-        setLoading(true);
-        try {
-            const data = await getCurrencies(chainId, { term, limit: 30 });
-            let tokenList = Array.isArray(data)
-                ? data
-                : data?.currencies || [];
-            setTokens(tokenList);
-        } catch {
-            /* ignore */
+    // Fetch balances when dropdown opens
+    useEffect(() => {
+        if (open && tokens.length > 0 && isConnected && address && chainId && publicClient) {
+            fetchAllBalances();
         }
-        setLoading(false);
-    };
+    }, [open, tokens.length, isConnected, address, chainId]);
 
     const fetchAllBalances = async () => {
         if (!publicClient || !address) return;
@@ -102,22 +78,35 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
             const newBalances = {};
 
             // Separate native and ERC20 tokens
+            const nativeTokens = tokens.filter((t) => {
+                const addr = (t.address || '').toLowerCase();
+                return (
+                    !addr ||
+                    addr === NATIVE_TOKEN.toLowerCase() ||
+                    t.metadata?.isNative === true
+                );
+            });
+
             const erc20Tokens = tokens.filter((t) => {
-                const addr = t.address || '';
+                const addr = (t.address || '').toLowerCase();
                 return (
                     addr &&
-                    addr !== NATIVE_TOKEN &&
-                    addr !== '0x0000000000000000000000000000000000000000'
+                    addr !== NATIVE_TOKEN.toLowerCase() &&
+                    t.metadata?.isNative !== true
                 );
             });
 
             // Fetch native balance
-            try {
-                const nativeBalance = await publicClient.getBalance({ address });
-                newBalances[NATIVE_TOKEN] = nativeBalance;
-                newBalances['0x0000000000000000000000000000000000000000'] = nativeBalance;
-            } catch (e) {
-                console.error('Native balance error:', e);
+            if (nativeTokens.length > 0) {
+                try {
+                    const nativeBalance = await publicClient.getBalance({ address });
+                    newBalances[NATIVE_TOKEN.toLowerCase()] = {
+                        raw: nativeBalance,
+                        decimals: 18,
+                    };
+                } catch (e) {
+                    console.error('Native balance error:', e);
+                }
             }
 
             // Batch fetch ERC20 balances via multicall
@@ -135,13 +124,16 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                     results.forEach((result, idx) => {
                         const token = erc20Tokens[idx];
                         if (result.status === 'success') {
-                            newBalances[token.address.toLowerCase()] = result.result;
+                            newBalances[token.address.toLowerCase()] = {
+                                raw: result.result,
+                                decimals: token.decimals || 18,
+                            };
                         }
                     });
                 } catch (e) {
                     console.error('Multicall error, falling back:', e);
-                    // Fallback: fetch one by one for first 10
-                    for (const token of erc20Tokens.slice(0, 10)) {
+                    // Fallback: fetch one by one for first 15
+                    for (const token of erc20Tokens.slice(0, 15)) {
                         try {
                             const balance = await publicClient.readContract({
                                 address: token.address,
@@ -149,7 +141,10 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                                 functionName: 'balanceOf',
                                 args: [address],
                             });
-                            newBalances[token.address.toLowerCase()] = balance;
+                            newBalances[token.address.toLowerCase()] = {
+                                raw: balance,
+                                decimals: token.decimals || 18,
+                            };
                         } catch {
                             /* skip */
                         }
@@ -166,12 +161,23 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
 
     const getTokenBalance = (token) => {
         const addr = (token.address || NATIVE_TOKEN).toLowerCase();
-        const raw = balances[addr];
-        if (raw === undefined || raw === null) return null;
-        const decimals = token.decimals || 18;
+        const entry = balances[addr];
+        if (!entry) return null;
         try {
-            const formatted = formatUnits(raw, decimals);
+            const formatted = formatUnits(entry.raw, entry.decimals);
             return parseFloat(formatted);
+        } catch {
+            return null;
+        }
+    };
+
+    const getSelectedBalance = () => {
+        if (!value) return null;
+        const addr = value.toLowerCase();
+        const entry = balances[addr];
+        if (!entry) return null;
+        try {
+            return formatUnits(entry.raw, entry.decimals);
         } catch {
             return null;
         }
@@ -180,25 +186,32 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
     const handleSearch = (e) => {
         const term = e.target.value;
         setSearch(term);
-        if (term.length >= 2) {
-            searchTokens(term);
-        } else if (term.length === 0) {
-            loadTokens();
-        }
+        // Client-side filter instead of API search for speed
     };
 
     const selected = tokens.find(
-        (t) =>
-            (t.address || '').toLowerCase() === (value || '').toLowerCase()
+        (t) => (t.address || '').toLowerCase() === (value || '').toLowerCase()
     );
 
-    // Sort tokens: those with balance first, then by balance descending
-    const sortedTokens = [...tokens].sort((a, b) => {
+    // Filter tokens by search term
+    const filteredTokens = search
+        ? tokens.filter(
+            (t) =>
+                t.symbol?.toLowerCase().includes(search.toLowerCase()) ||
+                t.name?.toLowerCase().includes(search.toLowerCase()) ||
+                t.address?.toLowerCase().includes(search.toLowerCase())
+        )
+        : tokens;
+
+    // Sort: tokens with balance > 0 first, then by balance descending
+    const sortedTokens = [...filteredTokens].sort((a, b) => {
         const balA = getTokenBalance(a);
         const balB = getTokenBalance(b);
-        if (balA !== null && balA > 0 && (balB === null || balB === 0)) return -1;
-        if (balB !== null && balB > 0 && (balA === null || balA === 0)) return 1;
-        if (balA !== null && balB !== null) return balB - balA;
+        const hasA = balA !== null && balA > 0;
+        const hasB = balB !== null && balB > 0;
+        if (hasA && !hasB) return -1;
+        if (hasB && !hasA) return 1;
+        if (hasA && hasB) return balB - balA;
         return 0;
     });
 
@@ -211,6 +224,9 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
         if (num < 1000000) return (num / 1000).toFixed(2) + 'K';
         return (num / 1000000).toFixed(2) + 'M';
     };
+
+    // Get selected token balance for external display
+    const selectedBal = getSelectedBalance();
 
     return (
         <div className="input-group">
@@ -227,7 +243,9 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                         <img
                             src={selected.metadata.logoURI}
                             alt={selected.symbol}
-                            onError={(e) => { e.target.style.display = 'none'; }}
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                            }}
                         />
                     ) : (
                         '🪙'
@@ -236,11 +254,22 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                 <span className="selector-name">
                     {selected ? selected.symbol : chainId ? 'Select token' : 'Select chain first'}
                 </span>
+                {selected && selectedBal !== null && (
+                    <span className="selector-balance">
+                        {formatBal(parseFloat(selectedBal))}
+                    </span>
+                )}
                 <span className="selector-chevron">▾</span>
             </button>
 
             {open && (
-                <div className="dropdown-overlay" onClick={() => { setOpen(false); setSearch(''); }}>
+                <div
+                    className="dropdown-overlay"
+                    onClick={() => {
+                        setOpen(false);
+                        setSearch('');
+                    }}
+                >
                     <div className="dropdown-panel" onClick={(e) => e.stopPropagation()}>
                         <div className="dropdown-search">
                             <input
@@ -279,7 +308,9 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                                                     <img
                                                         src={token.metadata.logoURI}
                                                         alt={token.symbol}
-                                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                        }}
                                                     />
                                                 ) : (
                                                     '🪙'
@@ -304,21 +335,12 @@ export default function TokenSelector({ chainId, value, onChange, label }) {
                             )}
                         </div>
                         {isConnected && (
-                            <div
-                                style={{
-                                    padding: '8px 16px',
-                                    borderTop: '1px solid var(--border-primary)',
-                                    fontSize: '11px',
-                                    color: 'var(--text-muted)',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                }}
-                            >
+                            <div className="dropdown-footer">
                                 <span>{tokens.length} tokens available</span>
                                 {balancesLoading ? (
                                     <span>Loading balances...</span>
                                 ) : (
-                                    <span>Balances loaded</span>
+                                    <span>Balances loaded ✓</span>
                                 )}
                             </div>
                         )}

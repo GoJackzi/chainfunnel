@@ -598,6 +598,24 @@ h6 {
   background: rgba(34, 211, 238, 0.08);
 }
 
+.dropdown-footer {
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-primary);
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.selector-balance {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-left: auto;
+  margin-right: 4px;
+}
+
 /* ============================================
    Trade Leg
    ============================================ */

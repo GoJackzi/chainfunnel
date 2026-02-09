@@ -30,16 +30,30 @@ export async function getChains() {
 
 // ---- CURRENCIES ----
 export async function getCurrencies(chainId, options = {}) {
-    const params = new URLSearchParams();
-    params.set('chainId', chainId);
-    if (options.term) params.set('term', options.term);
-    if (options.limit) params.set('limit', options.limit);
-    if (options.verified !== undefined) params.set('verified', options.verified);
+    const body = {
+        chainIds: [Number(chainId)],
+        defaultList: true,
+    };
+    if (options.term) body.term = options.term;
+    if (options.limit) body.limit = options.limit;
+    if (options.verified !== undefined) body.verified = options.verified;
+    if (options.useExternalSearch) body.useExternalSearch = true;
 
-    const res = await fetch(`${RELAY_API_BASE}/currencies/v2?${params.toString()}`);
+    const res = await fetch(`${RELAY_API_BASE}/currencies/v1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
     if (!res.ok) throw new Error(`Failed to fetch currencies: ${res.status}`);
     const data = await res.json();
-    return data;
+
+    // Response is a nested array [[token1, token2, ...]]
+    // Flatten it to a single array
+    if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
+        return data.flat();
+    }
+    if (Array.isArray(data)) return data;
+    return [];
 }
 
 // ---- TOKEN PRICE ----
